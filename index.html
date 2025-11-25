@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <title>Sleep Cycle Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 16px;
+      max-width: 450px;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.6rem;
+    }
+    label {
+      font-size: 1rem;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    button {
+      width: 100%;
+      margin-top: 15px;
+      padding: 12px;
+      font-size: 1rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0069d9;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e9f5ff;
+      border-radius: 10px;
+    }
+    .option {
+      margin-top: 10px;
+      background: #fafafa;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    @media (prefers-color-scheme: dark) {
+    body {
+      background: #121212;
+      color: #e0e0e0;
+    }
+    .container {
+      background: #1e1e1e;
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+    }
+    input {
+      background: #2c2c2c;
+      color: #ffffff;
+      border: 1px solid #444;
+    }
+    button {
+      background: #0a84ff;
+    }
+    .result, .option {
+      background: #1a1a1a;
+      border-color: #333;
+    }
+  }
+</style>
+  <link rel="manifest" href="manifest.json">
+  <script>
+    // Create service worker inline using Blob so no extra files are needed
+    const swCode = `self.addEventListener('install', e => { self.skipWaiting(); });
+self.addEventListener('activate', e => { clients.claim(); });
+self.addEventListener('fetch', e => { e.respondWith(fetch(e.request).catch(() => caches.match('/'))); });`;
+
+    const swBlob = new Blob([swCode], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(swBlob);
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register(swUrl).catch(err => console.error('SW registration failed:', err));
+      });
+    }
+  </script>
+</head>
+<body>
+  <script>
+    // Dynamically generate a minimal manifest.json at runtime
+    const manifest = {
+      name: "Sleep Cycle Calculator",
+      short_name: "SleepCalc",
+      start_url: "./",
+      display: "standalone",
+      background_color: "#000000",
+      theme_color: "#000000",
+      icons: [
+        {
+          src: "icon-192.png",
+          sizes: "192x192",
+          type: "image/png"
+        },
+        {
+          src: "icon-512.png",
+          sizes: "512x512",
+          type: "image/png"
+        }
+      ]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+    const manifestUrl = URL.createObjectURL(manifestBlob);
+    document.querySelector('link[rel="manifest"]').setAttribute('href', manifestUrl);
+  </script>
+  <div class="container">
+    <h1>Sleep Cycle Calculator</h1>
+    <label for="hours">Desired Hours of Sleep:</label>
+    <input id="hours" type="number" min="1" step="0.5" placeholder="e.g. 8" />
+
+    <button onclick="calculate()">Calculate Wake Time</button>
+
+    <div id="output"></div>
+  </div>
+
+  <script>
+  function roundToNext15(date) {
+    const minutes = date.getMinutes();
+    const rounded = Math.ceil(minutes / 15) * 15;
+
+    if (rounded === 60) {
+      date.setHours(date.getHours() + 1);
+      date.setMinutes(0);
+    } else {
+      date.setMinutes(rounded);
+    }
+
+    date.setSeconds(0);
+    date.setMilliseconds(0);
+    return date;
+  }
+
+  function calculate() {
+    const userHours = parseFloat(document.getElementById('hours').value);
+    const output = document.getElementById('output');
+    output.innerHTML = '';
+
+    if (isNaN(userHours) || userHours <= 0) {
+      output.innerHTML = '<p>Please enter a valid number of hours.</p>';
+      return;
+    }
+
+    const now = new Date();
+    const start = roundToNext15(new Date());
+
+    const cycles = Array.from({ length: 10 }, (_, i) => (i + 1) * 1.5);
+    const closest = cycles.reduce((a, b) => Math.abs(b - userHours) < Math.abs(a - userHours) ? b : a);
+
+    const wakeTime = new Date(start.getTime() + closest * 60 * 60 * 1000);
+
+    let html = `
+      <div class="result">
+        <h2 style="margin-top:0; font-size:1.4rem;">Wake up at: <strong>${wakeTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></h2>
+
+        <details style="margin-top:10px;">
+          <summary style="cursor:pointer; font-size:1rem; margin-bottom:8px;">More details</summary>
+          <p><strong>Current time:</strong> ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+          <p><strong>Rounded start time:</strong> ${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+          <p><strong>Closest cycle match:</strong> ${closest} hours</p>
+        </details>
+      </div>
+      <h3>Nearby Options:</h3>`;
+
+    cycles.forEach(c => {
+      if (c >= userHours - 2 && c <= userHours + 2) {
+        const t = new Date(start.getTime() + c * 60 * 60 * 1000);
+        html += `<div class="option">${c} hours → ${t.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+      }
+    });
+
+    output.innerHTML = html;
+  }
+</script>
+  <script>
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.createElement('button');
+      btn.textContent = "Install App";
+      btn.style.cssText = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:12px 20px; background:#0a84ff; color:#fff; border:none; border-radius:8px; font-size:1rem; z-index:999;";
+      btn.addEventListener('click', async () => {
+        btn.style.display = 'none';
+        deferredPrompt.prompt();
+        deferredPrompt = null;
+      });
+      document.body.appendChild(btn);
+    });
+  </script>
+</body>
+</html>
