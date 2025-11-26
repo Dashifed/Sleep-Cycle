@@ -28,7 +28,7 @@
     label {
       font-size: 1rem;
     }
-    input {
+    input, select {
       width: 100%;
       padding: 10px;
       margin-top: 8px;
@@ -63,6 +63,41 @@
       border-radius: 8px;
       border: 1px solid #ddd;
     }
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin: 20px 0;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #f0f0f0;
+      cursor: pointer;
+    }
+    .tab.active {
+      background: #007bff;
+      color: #fff;
+      border-color: #007bff;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .wake-inputs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .wake-inputs input,
+    .wake-inputs select {
+      flex: 1;
+      min-width: 90px;
+    }
     @media (prefers-color-scheme: dark) {
     body {
       background: #121212;
@@ -72,7 +107,7 @@
       background: #1e1e1e;
       box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
     }
-    input {
+    input, select {
       background: #2c2c2c;
       color: #ffffff;
       border: 1px solid #444;
@@ -83,6 +118,15 @@
     .result, .option {
       background: #1a1a1a;
       border-color: #333;
+    }
+    .tab {
+      background: #2c2c2c;
+      border-color: #444;
+      color: #fff;
+    }
+    .tab.active {
+      background: #0a84ff;
+      border-color: #0a84ff;
     }
   }
 </style>
@@ -162,10 +206,29 @@ self.addEventListener('fetch', event => {
   </script>
   <div class="container">
     <h1>Sleep Cycle Calculator</h1>
-    <label for="hours">Desired Hours of Sleep:</label>
-    <input id="hours" type="number" min="1" step="0.5" placeholder="e.g. 8" />
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="sleep" role="tab" aria-selected="true">Sleep Duration</button>
+      <button class="tab" data-tab="wake" role="tab" aria-selected="false">Wake Time</button>
+    </div>
 
-    <button onclick="calculate()">Calculate Wake Time</button>
+    <div id="sleep-tab" class="tab-content active" role="tabpanel">
+      <label for="hours">Desired Hours of Sleep:</label>
+      <input id="hours" type="number" min="1" step="0.5" placeholder="e.g. 8" />
+      <button onclick="calculateSleep()">Calculate Wake Time</button>
+    </div>
+
+    <div id="wake-tab" class="tab-content" role="tabpanel">
+      <label>Desired Wake Time:</label>
+      <div class="wake-inputs">
+        <input id="wake-hour" type="number" min="1" max="12" placeholder="HH" />
+        <input id="wake-minute" type="number" min="0" max="59" placeholder="00" />
+        <select id="wake-period">
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
+      </div>
+      <button onclick="calculateBedtime()">Calculate Bedtime</button>
+    </div>
 
     <div id="output"></div>
   </div>
@@ -187,7 +250,23 @@ self.addEventListener('fetch', event => {
     return date;
   }
 
-  function calculate() {
+  const tabButtons = document.querySelectorAll('.tab');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabButtons.forEach(b => {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-selected', b === btn);
+      });
+      tabContents.forEach(content => {
+        content.classList.toggle('active', content.id === `${btn.dataset.tab}-tab`);
+      });
+      document.getElementById('output').innerHTML = '';
+    });
+  });
+
+  function calculateSleep() {
     const userHours = parseFloat(document.getElementById('hours').value);
     const output = document.getElementById('output');
     output.innerHTML = '';
@@ -223,6 +302,46 @@ self.addEventListener('fetch', event => {
         const t = new Date(start.getTime() + c * 60 * 60 * 1000);
         html += `<div class="option">${c} hours → ${t.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
       }
+    });
+
+    output.innerHTML = html;
+  }
+
+  function calculateBedtime() {
+    const hour = parseInt(document.getElementById('wake-hour').value, 10);
+    const minuteInput = document.getElementById('wake-minute');
+    const minute = minuteInput.value === '' ? 0 : parseInt(minuteInput.value, 10);
+    const period = document.getElementById('wake-period').value;
+    const output = document.getElementById('output');
+    output.innerHTML = '';
+
+    if (isNaN(hour) || isNaN(minute) || hour < 1 || hour > 12 || minute < 0 || minute > 59) {
+      output.innerHTML = '<p>Please enter a valid wake time.</p>';
+      return;
+    }
+
+    const now = new Date();
+    const wakeTime = new Date(now);
+    let normalizedHour = hour % 12;
+    if (period === 'PM') normalizedHour += 12;
+    wakeTime.setHours(normalizedHour, minute, 0, 0);
+    if (wakeTime <= now) {
+      wakeTime.setDate(wakeTime.getDate() + 1);
+    }
+
+    const cycles = [4.5, 6, 7.5, 9];
+    const recommendedCycle = 7.5;
+    const recommendedBedtime = new Date(wakeTime.getTime() - recommendedCycle * 60 * 60 * 1000);
+    let html = `
+      <div class="result">
+        <h2 style="margin-top:0; font-size:1.4rem;">Go to bed by: <strong>${recommendedBedtime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></h2>
+        <p style="margin-top:10px;">This gives you approximately ${recommendedCycle} hours of sleep before your alarm.</p>
+      </div>
+      <h3>Try sleeping at:</h3>`;
+
+    cycles.forEach(cycle => {
+      const bedtime = new Date(wakeTime.getTime() - cycle * 60 * 60 * 1000);
+      html += `<div class="option">${cycle} hours of sleep → ${bedtime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
     });
 
     output.innerHTML = html;
